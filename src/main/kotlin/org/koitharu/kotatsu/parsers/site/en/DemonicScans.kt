@@ -1,6 +1,9 @@
 package org.koitharu.kotatsu.parsers.site.en
 
 import androidx.collection.arraySetOf
+import okhttp3.Headers
+import okhttp3.Interceptor
+import okhttp3.Response
 import org.koitharu.kotatsu.parsers.MangaLoaderContext
 import org.koitharu.kotatsu.parsers.MangaSourceParser
 import org.koitharu.kotatsu.parsers.config.ConfigKey
@@ -13,9 +16,31 @@ import java.util.*
 
 @MangaSourceParser("DEMONICSCANS", "DemonicScans", "en")
 internal class DemonicScans(context: MangaLoaderContext) :
-    PagedMangaParser(context, MangaParserSource.DEMONICSCANS, 25) {
+    PagedMangaParser(context, MangaParserSource.DEMONICSCANS, 25), Interceptor {
 
     override val configKeyDomain = ConfigKey.Domain("demonicscans.org")
+
+    override fun getRequestHeaders(): Headers = super.getRequestHeaders().newBuilder()
+        .add("Referer", "https://$domain/")
+        .build()
+
+    /**
+     * Page images are served from a separate CDN host that rejects requests without a Referer,
+     * responding 520. Image requests are issued by the app's image loader rather than through
+     * [getRequestHeaders], so the header has to be attached here as well.
+     */
+    override fun intercept(chain: Interceptor.Chain): Response {
+        val request = chain.request()
+        return if (request.header("Referer").isNullOrEmpty()) {
+            chain.proceed(
+                request.newBuilder()
+                    .header("Referer", "https://$domain/")
+                    .build(),
+            )
+        } else {
+            chain.proceed(request)
+        }
+    }
 
     override val availableSortOrders: Set<SortOrder> = EnumSet.of(
         SortOrder.NEWEST,
